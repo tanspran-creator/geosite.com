@@ -18,14 +18,15 @@
 
   // 🔐 Ta configuration Firebase
   const firebaseConfig = {
-    apiKey: "AIzaSyCERRYunxY5FSS877mUdKHo6W1mRXIPjgM",
-    authDomain: "geo-site-tracker.firebaseapp.com",
-    projectId: "geo-site-tracker",
-    storageBucket: "geo-site-tracker.firebasestorage.app",
-    messagingSenderId: "837391043750",
-    appId: "1:837391043750:web:4a5eb441e598df0bfab867",
-    measurementId: "G-0WSGVT6HGT"
-  };
+  apiKey: "AIzaSyCERRYunxY5FSS877mUdKHo6W1mRXIPjgM",
+  authDomain: "geo-site-tracker.firebaseapp.com",
+  databaseURL: "https://geo-site-tracker-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "geo-site-tracker",
+  storageBucket: "geo-site-tracker.firebasestorage.app",
+  messagingSenderId: "837391043750",
+  appId: "1:837391043750:web:4a5eb441e598df0bfab867",
+  measurementId: "G-0WSGVT6HGT"
+};
 
   // ✅ Initialisation Firebase
   const app = initializeApp(firebaseConfig);
