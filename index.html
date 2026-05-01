@@ -2,8 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Position</title>
-
+<title>Live Position</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -17,14 +16,23 @@ body {
   text-align:center;
 }
 
-#map {
-  height:70vh;
+button {
+  margin-top:20px;
+  padding:12px 20px;
+  font-size:16px;
+  border:none;
+  border-radius:8px;
+  background:#3b82f6;
+  color:white;
 }
 
-button {
-  margin:15px;
-  padding:12px;
-  font-size:16px;
+#map {
+  height:60vh;
+  margin-top:20px;
+}
+
+#info {
+  margin-top:10px;
 }
 </style>
 </head>
@@ -32,90 +40,115 @@ button {
 <body>
 
 <h2>📍 Partager ma position</h2>
-<button id="btn">Partager</button>
 
-<p id="status">En attente...</p>
-<p id="address"></p>
+<button id="btn">ACTIVER LA LOCALISATION</button>
+
+<div id="info">
+  <p id="coords">En attente...</p>
+  <p id="address">Adresse inconnue</p>
+</div>
 
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
+<!-- FIREBASE -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyAgwaKZKvLOW_GYpVirgywWETM4Kjz3dVQ",
-  authDomain: "mymaponline-d4fcf.firebaseapp.com",
-  projectId: "mymaponline-d4fcf",
-  storageBucket: "mymaponline-d4fcf.firebasestorage.app",
-  messagingSenderId: "294259967332",
-  appId: "1:294259967332:web:d81f81f5122ff5ef626671",
-  measurementId: "G-4M4S7687W5"
-};
+  const firebaseConfig = {
+    apiKey: "AIzaSyAgwaKZKvLOW_GYpVirgywWETM4Kjz3dVQ",
+    authDomain: "mymaponline-d4fcf.firebaseapp.com",
+    projectId: "mymaponline-d4fcf",
+    storageBucket: "mymaponline-d4fcf.firebasestorage.app",
+    messagingSenderId: "294259967332",
+    appId: "1:294259967332:web:d81f81f5122ff5ef626671",
+    measurementId: "G-4M4S7687W5"
+  };
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// bouton = déclenche tout
+window.db = db;
+window.setDoc = setDoc;
+window.doc = doc;
+</script>
+
+<script>
+let map, marker;
+let userId = localStorage.getItem("id") || crypto.randomUUID();
+localStorage.setItem("id", userId);
+
 document.getElementById("btn").addEventListener("click", () => {
 
   if (!navigator.geolocation) {
-    alert("GPS non supporté");
+    alert("Géolocalisation non supportée");
     return;
   }
 
-  document.getElementById("status").innerText = "Demande de permission...";
+  document.getElementById("coords").innerText = "Demande GPS...";
 
   navigator.geolocation.getCurrentPosition(async (pos) => {
 
     const lat = pos.coords.latitude;
     const lon = pos.coords.longitude;
 
-    document.getElementById("status").innerText = "Position OK";
+    document.getElementById("coords").innerText =
+      `Lat: ${lat} | Lon: ${lon}`;
 
     // MAP
-    const map = L.map('map').setView([lat, lon], 16);
+    if (!map) {
+      map = L.map('map').setView([lat, lon], 15);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png')
-      .addTo(map);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: "© OpenStreetMap"
+      }).addTo(map);
 
-    L.marker([lat, lon]).addTo(map);
+      marker = L.marker([lat, lon]).addTo(map);
+    } else {
+      map.setView([lat, lon]);
+      marker.setLatLng([lat, lon]);
+    }
 
-    // ADRESSE
-    let address = "Inconnue";
-
+    // GEOAPIFY (adresse)
     try {
       const res = await fetch(
         `https://api.geoapify.com/v1/geocode/reverse?lat=${lat}&lon=${lon}&apiKey=708354c5ad334d41b0611f73996998e1`
       );
+
       const data = await res.json();
-      address = data.features?.[0]?.properties?.formatted || "Inconnue";
-    } catch(e){}
+      const address = data.features?.[0]?.properties?.formatted || "Adresse inconnue";
 
-    document.getElementById("address").innerText = address;
+      document.getElementById("address").innerText = address;
 
-    // FIREBASE
-    await addDoc(collection(db, "logs"), {
-      lat,
-      lon,
-      address,
-      userAgent: navigator.userAgent,
-      time: new Date().toISOString()
-    });
+      // FIREBASE SAVE
+      await window.setDoc(
+        window.doc(window.db, "positions", userId),
+        {
+          lat,
+          lon,
+          address,
+          time: new Date().toISOString()
+        }
+      );
+
+    } catch (e) {
+      console.log("Erreur API", e);
+    }
 
   }, (err) => {
 
-    // GESTION CLAIRE ERREUR
     if (err.code === 1) {
-      alert("❌ Tu as refusé la localisation → autorise-la dans ton navigateur");
+      alert("❌ Autorisation refusée → autorise la localisation dans Chrome");
     } else {
-      alert("Erreur GPS: " + err.message);
+      alert("❌ Erreur GPS");
     }
 
   }, {
-    enableHighAccuracy: true
+    enableHighAccuracy: true,
+    timeout: 10000,
+    maximumAge: 0
   });
 
 });
