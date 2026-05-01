@@ -1,183 +1,140 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <title>Voir ma position exacte</title>
-  <style>
-    body { font-family: sans-serif; padding: 1rem; }
-    #map { width: 100%; height: 400px; margin-top: 1rem; }
-    button { padding: 0.6rem 1.2rem; font-size: 1rem; }
-    #status { margin-top: 1rem; font-weight: bold; }
-  </style>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<!-- Firebase SDKs -->
-<script type="module">
- // Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+<meta charset="UTF-8">
+<title>Live Position</title>
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+<style>
+body {
+  margin:0;
+  font-family: Arial;
+  background:#0f172a;
+  color:white;
+}
+
+header {
+  text-align:center;
+  padding:12px;
+}
+
+#map {
+  height:70vh;
+  width:100%;
+}
+
+#info {
+  padding:10px;
+  text-align:center;
+}
+
+button {
+  padding:10px 16px;
+  border:none;
+  border-radius:8px;
+  background:#3b82f6;
+  color:white;
+  cursor:pointer;
+}
+</style>
+</head>
+
+<body>
+
+<header>📍 Ma position en direct</header>
+
+<div id="info">
+  <button onclick="start()">Partager ma position</button>
+  <p id="coords">En attente...</p>
+  <p id="address">Adresse inconnue</p>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script type="module">
+// ================= FIREBASE =================
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
 const firebaseConfig = {
-  apiKey: "AIzaSyCERRYunxY5FSS877mUdKHo6W1mRXIPjgM",
-  authDomain: "geo-site-tracker.firebaseapp.com",
-  databaseURL: "https://geo-site-tracker-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "geo-site-tracker",
-  storageBucket: "geo-site-tracker.firebasestorage.app",
-  messagingSenderId: "837391043750",
-  appId: "1:837391043750:web:4a5eb441e598df0bfab867",
-  measurementId: "G-0WSGVT6HGT"
+  apiKey: "TON_API_KEY",
+  authDomain: "TON_PROJECT.firebaseapp.com",
+  projectId: "TON_PROJECT",
+  storageBucket: "TON_PROJECT.appspot.com",
+  messagingSenderId: "XXX",
+  appId: "XXX"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-  // 📍 Fonction pour enregistrer la position
-  async function enregistrerPosition(lat, lon, adresse) {
-    try {
-      await addDoc(collection(db, "positions"), {
-        latitude: lat,
-        longitude: lon,
-        adresse: adresse,
-        timestamp: new Date().toISOString(),
-        userAgent: navigator.userAgent
-      });
-      console.log("📌 Position enregistrée avec succès !");
-    } catch (e) {
-      console.error("❌ Erreur Firestore :", e);
-    }
-  }
+const db = getFirestore(app);
 
-  // 📡 Récupère la position géographique et adresse
-  async function getAdresseEtEnvoyer() {
-    if (!navigator.geolocation) {
-      alert("La géolocalisation n’est pas supportée.");
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(async (position) => {
-      const lat = position.coords.latitude;
-      const lon = position.coords.longitude;
-
-      const res = await fetch(`https://api.geoapify.com/v1/geocode/reverse?lat=${lat}&lon=${lon}&apiKey=708354c5ad334d41b0611f73996998e1`);
-      const data = await res.json();
-      const adresse = data.features?.[0]?.properties?.formatted || "Adresse inconnue";
-
-      document.getElementById("adresse").innerText = `📍 ${adresse}`;
-
-      // 💾 Enregistrement dans Firestore
-      await enregistrerPosition(lat, lon, adresse);
-    },
-    () => alert("❌ Permission refusée ou erreur de géolocalisation."),
-    { enableHighAccuracy: true });
-  }
-
-  // ▶️ Démarre au chargement
-  window.onload = getAdresseEtEnvoyer;
+window.db = db;
+window.setDoc = setDoc;
+window.doc = doc;
 </script>
-</head>
-<body>
-  <h1>Voir ma position exacte</h1>
-  <button onclick="getLocation()">Voir ma position</button>
-  <div id="status"></div>
-  <div id="map"></div>
-  <p id="adresse">Recherche de votre adresse...</p>
-  <h2 id="adresse">📍 Recherche de votre position...</h2>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script>
-  // Fonction pour obtenir l’adresse exacte
-  function getAdresseExacte() {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(async function(position) {
-        const latitude = position.coords.latitude;
-        const longitude = position.coords.longitude;
+<script>
+let map;
+let marker;
+let userId = localStorage.getItem("id") || crypto.randomUUID();
+localStorage.setItem("id", userId);
 
-        // Remplace ici par TA propre clé API Geoapify
-        const apiKey = "708354c5ad334d41b0611f73996998e1";
+// ================= MAP =================
+function initMap(lat, lon){
+  map = L.map('map').setView([lat, lon], 16);
 
-        const url = `https://api.geoapify.com/v1/geocode/reverse?lat=${latitude}&lon=${longitude}&apiKey=${apiKey}`;
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution:'© OpenStreetMap'
+  }).addTo(map);
 
-        const response = await fetch(url);
-        const data = await response.json();
+  marker = L.marker([lat, lon]).addTo(map);
+}
 
-        if (data.features && data.features.length > 0) {
-          const adresse = data.features[0].properties.formatted;
-          document.getElementById("adresse").innerText = "Votre adresse : " + adresse;
+// ================= START =================
+function start(){
+  navigator.geolocation.watchPosition(async (pos) => {
 
-          // Optionnel : envoyer vers ton backend
-          // fetch("https://mon-backend.com/collecte", { method: "POST", body: JSON.stringify({ adresse }) });
+    const lat = pos.coords.latitude;
+    const lon = pos.coords.longitude;
 
-        } else {
-          document.getElementById("adresse").innerText = "Impossible de déterminer l'adresse.";
-        }
+    document.getElementById("coords").innerText =
+      `Lat: ${lat} | Lon: ${lon}`;
 
-      }, function(error) {
-        alert("Permission refusée ou erreur de géolocalisation.");
-      }, { enableHighAccuracy: true });
+    if(!map){
+      initMap(lat, lon);
     } else {
-      alert("Géolocalisation non supportée.");
+      map.setView([lat, lon]);
+      marker.setLatLng([lat, lon]);
     }
-  }
 
-  // Appel automatique au chargement de la page
-  window.onload = getAdresseExacte;
-</script><script>
-    let map, marker;
+    // ================= GEOAPIFY =================
+    const res = await fetch(
+      `https://api.geoapify.com/v1/geocode/reverse?lat=${lat}&lon=${lon}&apiKey=TA_CLE_GEOAPIFY`
+    );
 
-    function getLocation() {
-      const status = document.getElementById("status");
-      status.textContent = "Localisation en cours…";
+    const data = await res.json();
+    const address = data.features?.[0]?.properties?.formatted || "Adresse inconnue";
 
-      if (!navigator.geolocation) {
-        status.textContent = "Géolocalisation non supportée.";
-        return;
-      }
+    document.getElementById("address").innerText = address;
 
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const lat = position.coords.latitude;
-          const lon = position.coords.longitude;
+    // ================= FIREBASE SAVE =================
+    await window.setDoc(window.doc(window.db, "positions", userId), {
+      lat,
+      lon,
+      address,
+      time: new Date().toISOString()
+    });
 
-          status.innerHTML = `
-            <p>Latitude : ${lat}</p>
-            <p>Longitude : ${lon}</p>
-          `;
+  }, (err) => {
+    alert("Erreur géolocalisation");
+  }, {
+    enableHighAccuracy:true
+  });
+}
+</script>
 
-          // Affichage de la carte
-          if (!map) {
-            map = L.map('map').setView([lat, lon], 16);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-              attribution: '&copy; OpenStreetMap contributors'
-            }).addTo(map);
-            marker = L.marker([lat, lon]).addTo(map).bindPopup("Vous êtes ici").openPopup();
-          } else {
-            map.setView([lat, lon], 16);
-            marker.setLatLng([lat, lon]);
-          }
-
-          // Appel de l'API Nominatim pour l'adresse postale
-          fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`)
-            .then(res => res.json())
-            .then(data => {
-              if (data.display_name) {
-                status.innerHTML += `<p><strong>Adresse :</strong> ${data.display_name}</p>`;
-              } else {
-                status.innerHTML += `<p>Adresse non trouvée.</p>`;
-              }
-            })
-            .catch(() => {
-              status.innerHTML += `<p>Erreur lors de la récupération de l'adresse.</p>`;
-            });
-        },
-        (error) => {
-          status.textContent = "Erreur de localisation : " + error.message;
-        },
-        { enableHighAccuracy: true }
-      );
-    }
-  </script>
 </body>
 </html>
