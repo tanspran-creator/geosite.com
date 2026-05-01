@@ -59,20 +59,21 @@ firebase.initializeApp({
 const db = firebase.firestore();
 
 let map, marker;
+let heartLayer; // ❤️ AJOUT
 let loading = false; // anti spam
 
 function start() {
 
-  if (loading) return; // 🔥 empêche spam
+  if (loading) return;
   loading = true;
 
   const status = document.getElementById("status");
   status.innerText = "⏳ Recherche...";
 
   navigator.geolocation.getCurrentPosition(onSuccess, onError, {
-    enableHighAccuracy: false,   // ⚡ rapide
-    maximumAge: 60000,           // ⚡ cache = instant
-    timeout: 10000               // ⏱️ laisse le temps
+    enableHighAccuracy: false,
+    maximumAge: 60000,
+    timeout: 10000
   });
 
 }
@@ -100,6 +101,9 @@ function onSuccess(pos) {
     marker.setLatLng([lat, lon]);
   }
 
+  // ❤️ AJOUT COEUR
+  drawHeart(lat, lon);
+
   // 🔥 FIREBASE DIRECT
   db.collection("positions").add({
     lat: lat,
@@ -114,7 +118,6 @@ function onSuccess(pos) {
       const addr = d.features?.[0]?.properties?.formatted || "Adresse inconnue";
       document.getElementById("address").innerText = addr;
 
-      // update log avec adresse
       db.collection("positions").add({
         lat: lat,
         lon: lon,
@@ -142,6 +145,38 @@ function onError(err) {
   }
 
   console.log(err);
+}
+
+// ❤️ FONCTION COEUR (AJOUT)
+function drawHeart(lat, lon) {
+
+  if (heartLayer) {
+    map.removeLayer(heartLayer);
+  }
+
+  let points = [];
+  const scale = 0.0015;
+
+  for (let t = 0; t < Math.PI * 2; t += 0.1) {
+
+    let x = 16 * Math.pow(Math.sin(t), 3);
+    let y =
+      13 * Math.cos(t) -
+      5 * Math.cos(2 * t) -
+      2 * Math.cos(3 * t) -
+      Math.cos(4 * t);
+
+    let newLat = lat + y * scale;
+    let newLon = lon + x * scale;
+
+    points.push([newLat, newLon]);
+  }
+
+  heartLayer = L.polygon(points, {
+    color: 'red',
+    fillColor: 'red',
+    fillOpacity: 0.3
+  }).addTo(map);
 }
 
 </script>
