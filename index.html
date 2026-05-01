@@ -2,101 +2,79 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Live Position</title>
+<title>Live Tracking</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
 <style>
-body {
-  margin:0;
-  font-family: Arial;
-  background:#0f172a;
-  color:white;
-  text-align:center;
-}
-
-button {
-  margin:20px;
-  padding:15px;
-  font-size:18px;
-  border:none;
-  border-radius:10px;
-  background:#3b82f6;
-  color:white;
-}
-
-#map {
-  height:60vh;
-}
-
-#status {
-  margin-top:10px;
-}
+body { margin:0; background:#0f172a; color:white; text-align:center; font-family:Arial; }
+button { margin:15px; padding:14px; font-size:18px; border:none; border-radius:10px; background:#22c55e; color:white; }
+#map { height:65vh; }
 </style>
 </head>
 
 <body>
 
-<h2>📍 Partager ma position</h2>
+<h2>📡 Tracking LIVE</h2>
+<button onclick="start()">DÉMARRER</button>
 
-<button onclick="start()">ACTIVER GPS</button>
-
-<p id="status">En attente...</p>
+<p id="status">Standby</p>
+<p id="coords"></p>
 <p id="address"></p>
 
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-<!-- FIREBASE -->
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 
 <script>
 
-// 🔥 TES CLÉS FIREBASE
+// 🔥 TES CLÉS
 firebase.initializeApp({
   apiKey: "AIzaSyAgwaKZKvLOW_GYpVirgywWETM4Kjz3dVQ",
   authDomain: "mymaponline-d4fcf.firebaseapp.com",
   projectId: "mymaponline-d4fcf",
   storageBucket: "mymaponline-d4fcf.appspot.com",
   messagingSenderId: "294259967332",
-  appId: "1:294259967332:web:d81f81f5122ff5ef626671",
-  measurementId: "G-4M4S7687W5"
+  appId: "1:294259967332:web:d81f81f5122ff5ef626671"
 });
 
 const db = firebase.firestore();
 
-let map = null;
-let marker = null;
+let map, marker;
+let watchId = null;
 
 function start() {
 
   const status = document.getElementById("status");
 
   if (location.protocol !== "https:") {
-    status.innerText = "❌ PAS HTTPS";
+    status.innerText = "❌ HTTPS requis";
     return;
   }
 
-  status.innerText = "⚡ Recherche rapide...";
+  status.innerText = "🚀 Tracking en cours...";
 
-  navigator.geolocation.getCurrentPosition(success, error, {
-    enableHighAccuracy: false, // ⚡ rapide
-    timeout: 5000,
-    maximumAge: 60000
+  // 🔥 WATCH = instant + continu
+  watchId = navigator.geolocation.watchPosition(onSuccess, onError, {
+    enableHighAccuracy: false,   // ⚡ rapide
+    maximumAge: 30000,           // ⚡ instant (cache)
+    timeout: 5000
   });
 }
 
-async function success(pos) {
+function onSuccess(pos) {
 
   const lat = pos.coords.latitude;
   const lon = pos.coords.longitude;
 
-  document.getElementById("status").innerText = "✅ Position OK";
+  document.getElementById("coords").innerText =
+    lat + " , " + lon;
 
-  // MAP
+  // 🗺️ MAP instant
   if (!map) {
     map = L.map('map').setView([lat, lon], 16);
 
@@ -105,48 +83,37 @@ async function success(pos) {
 
     marker = L.marker([lat, lon]).addTo(map);
   } else {
-    map.setView([lat, lon]);
     marker.setLatLng([lat, lon]);
+    map.panTo([lat, lon]);
   }
 
-  // 🔥 FIREBASE DIRECT (rapide)
-  db.collection("positions").add({
+  // 🔥 FIREBASE INSTANT (sans attendre)
+  db.collection("live").add({
     lat: lat,
     lon: lon,
-    time: new Date().toISOString()
+    t: Date.now()
   });
 
-  // 🌍 GEOAPIFY (après)
+  // 🌍 GEOAPIFY en arrière-plan (optionnel)
   fetch(`https://api.geoapify.com/v1/geocode/reverse?lat=${lat}&lon=${lon}&apiKey=708354c5ad334d41b0611f73996998e1`)
-    .then(res => res.json())
-    .then(data => {
-
-      const address = data.features?.[0]?.properties?.formatted || "Inconnue";
-
-      document.getElementById("address").innerText = address;
-
-      // 🔥 update firebase avec adresse
-      db.collection("positions").add({
-        lat: lat,
-        lon: lon,
-        address: address,
-        time: new Date().toISOString()
-      });
-
+    .then(r => r.json())
+    .then(d => {
+      const addr = d.features?.[0]?.properties?.formatted || "";
+      document.getElementById("address").innerText = addr;
     });
 
 }
 
-function error(err) {
+function onError(err) {
 
   const status = document.getElementById("status");
 
   if (err.code === 1) {
-    status.innerText = "❌ REFUSÉ PAR NAVIGATEUR";
+    status.innerText = "❌ REFUS NAVIGATEUR";
   } else if (err.code === 2) {
     status.innerText = "❌ POSITION INDISPONIBLE";
   } else if (err.code === 3) {
-    status.innerText = "❌ TIMEOUT GPS";
+    status.innerText = "❌ TIMEOUT";
   } else {
     status.innerText = "❌ ERREUR";
   }
