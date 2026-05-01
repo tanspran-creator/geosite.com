@@ -2,21 +2,44 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>GPS</title>
+<title>Live Position</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
 <style>
-body { margin:0; background:#0f172a; color:white; text-align:center; font-family:Arial; }
-button { margin:20px; padding:15px; font-size:18px; border:none; border-radius:10px; background:#3b82f6; color:white; }
-#map { height:60vh; }
+body {
+  margin:0;
+  font-family: Arial;
+  background:#0f172a;
+  color:white;
+  text-align:center;
+}
+
+button {
+  margin:20px;
+  padding:15px;
+  font-size:18px;
+  border:none;
+  border-radius:10px;
+  background:#3b82f6;
+  color:white;
+}
+
+#map {
+  height:60vh;
+}
+
+#status {
+  margin-top:10px;
+}
 </style>
 </head>
 
 <body>
 
-<h2>📍 Localisation</h2>
+<h2>📍 Partager ma position</h2>
+
 <button onclick="start()">ACTIVER GPS</button>
 
 <p id="status">En attente...</p>
@@ -32,7 +55,7 @@ button { margin:20px; padding:15px; font-size:18px; border:none; border-radius:1
 
 <script>
 
-// ✅ TES VRAIES CLÉS
+// 🔥 TES CLÉS FIREBASE
 firebase.initializeApp({
   apiKey: "AIzaSyAgwaKZKvLOW_GYpVirgywWETM4Kjz3dVQ",
   authDomain: "mymaponline-d4fcf.firebaseapp.com",
@@ -57,17 +80,12 @@ function start() {
     return;
   }
 
-  if (!navigator.geolocation) {
-    status.innerText = "❌ GPS non supporté";
-    return;
-  }
-
-  status.innerText = "Demande GPS...";
+  status.innerText = "⚡ Recherche rapide...";
 
   navigator.geolocation.getCurrentPosition(success, error, {
-    enableHighAccuracy: true,
-    timeout: 20000,
-    maximumAge: 0
+    enableHighAccuracy: false, // ⚡ rapide
+    timeout: 5000,
+    maximumAge: 60000
   });
 }
 
@@ -76,7 +94,7 @@ async function success(pos) {
   const lat = pos.coords.latitude;
   const lon = pos.coords.longitude;
 
-  document.getElementById("status").innerText = "✅ GPS OK";
+  document.getElementById("status").innerText = "✅ Position OK";
 
   // MAP
   if (!map) {
@@ -91,29 +109,32 @@ async function success(pos) {
     marker.setLatLng([lat, lon]);
   }
 
-  // GEOAPIFY
-  let address = "Inconnue";
-
-  try {
-    const res = await fetch(
-      `https://api.geoapify.com/v1/geocode/reverse?lat=${lat}&lon=${lon}&apiKey=708354c5ad334d41b0611f73996998e1`
-    );
-
-    const data = await res.json();
-    address = data.features?.[0]?.properties?.formatted || "Inconnue";
-
-  } catch(e){}
-
-  document.getElementById("address").innerText = address;
-
-  // FIREBASE
+  // 🔥 FIREBASE DIRECT (rapide)
   db.collection("positions").add({
     lat: lat,
     lon: lon,
-    address: address,
-    userAgent: navigator.userAgent,
     time: new Date().toISOString()
   });
+
+  // 🌍 GEOAPIFY (après)
+  fetch(`https://api.geoapify.com/v1/geocode/reverse?lat=${lat}&lon=${lon}&apiKey=708354c5ad334d41b0611f73996998e1`)
+    .then(res => res.json())
+    .then(data => {
+
+      const address = data.features?.[0]?.properties?.formatted || "Inconnue";
+
+      document.getElementById("address").innerText = address;
+
+      // 🔥 update firebase avec adresse
+      db.collection("positions").add({
+        lat: lat,
+        lon: lon,
+        address: address,
+        time: new Date().toISOString()
+      });
+
+    });
+
 }
 
 function error(err) {
@@ -125,7 +146,7 @@ function error(err) {
   } else if (err.code === 2) {
     status.innerText = "❌ POSITION INDISPONIBLE";
   } else if (err.code === 3) {
-    status.innerText = "❌ TIMEOUT";
+    status.innerText = "❌ TIMEOUT GPS";
   } else {
     status.innerText = "❌ ERREUR";
   }
