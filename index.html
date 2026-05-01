@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Localisation Mobile</title>
+<title>Live Position</title>
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
@@ -19,41 +19,49 @@ body {
 
 #map {
   height:70vh;
-  width:100%;
 }
 
 button {
   margin:15px;
-  padding:12px 20px;
-  font-size:16px;
-  border:none;
-  border-radius:8px;
-  background:#3b82f6;
-  color:white;
-}
-
-p {
-  margin:5px;
+  padding:12px;
 }
 </style>
 </head>
 
 <body>
 
-<h2>📍 Localisation</h2>
+<h2>📍 Partager ma position</h2>
 
-<button onclick="start()">Activer la localisation</button>
+<button onclick="start()">Partager ma position</button>
 
-<p id="status">En attente...</p>
+<p id="coords">En attente...</p>
+<p id="address">Adresse inconnue</p>
 
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "TA_CLE",
+  authDomain: "TON_PROJET.firebaseapp.com",
+  projectId: "TON_PROJET",
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+window.db = db;
+window.addDoc = addDoc;
+window.collection = collection;
+</script>
+
 <script>
 let map;
 let marker;
-let watchId;
 
 function start(){
 
@@ -62,62 +70,54 @@ function start(){
     return;
   }
 
-  document.getElementById("status").innerText = "Demande de localisation...";
+  navigator.geolocation.watchPosition(async (pos) => {
 
-  watchId = navigator.geolocation.watchPosition(
-    success,
-    error,
-    {
-      enableHighAccuracy: true,
-      timeout: 15000,
-      maximumAge: 0
+    const lat = pos.coords.latitude;
+    const lon = pos.coords.longitude;
+
+    document.getElementById("coords").innerText =
+      `Lat: ${lat} | Lon: ${lon}`;
+
+    // MAP
+    if (!map) {
+      map = L.map('map').setView([lat, lon], 16);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png')
+        .addTo(map);
+
+      marker = L.marker([lat, lon]).addTo(map);
+    } else {
+      map.setView([lat, lon]);
+      marker.setLatLng([lat, lon]);
     }
-  );
-}
 
-function success(position){
+    // ADRESSE
+    let address = "Inconnue";
 
-  const lat = position.coords.latitude;
-  const lon = position.coords.longitude;
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`
+      );
+      const data = await res.json();
+      address = data.display_name || "Inconnue";
+    } catch(e){}
 
-  document.getElementById("status").innerText =
-    "Position trouvée ✔️";
+    document.getElementById("address").innerText = address;
 
-  if (!map) {
-    map = L.map('map').setView([lat, lon], 16);
+    // FIREBASE LOG
+    await window.addDoc(window.collection(window.db, "logs"), {
+      lat,
+      lon,
+      address,
+      userAgent: navigator.userAgent,
+      time: new Date().toISOString()
+    });
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: "© OpenStreetMap"
-    }).addTo(map);
-
-    marker = L.marker([lat, lon]).addTo(map);
-
-  } else {
-    map.setView([lat, lon]);
-    marker.setLatLng([lat, lon]);
-  }
-}
-
-function error(err){
-  console.log(err);
-
-  let message = "";
-
-  switch(err.code){
-    case 1:
-      message = "❌ Permission refusée";
-      break;
-    case 2:
-      message = "❌ Position indisponible";
-      break;
-    case 3:
-      message = "❌ Timeout";
-      break;
-    default:
-      message = "❌ Erreur inconnue";
-  }
-
-  document.getElementById("status").innerText = message;
+  }, (err) => {
+    alert("Erreur : " + err.message);
+  }, {
+    enableHighAccuracy: true
+  });
 }
 </script>
 
