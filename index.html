@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Live Position</title>
+<title>Position</title>
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
@@ -25,10 +25,6 @@ button {
   margin:15px;
   padding:12px;
   font-size:16px;
-  border:none;
-  border-radius:8px;
-  background:#3b82f6;
-  color:white;
 }
 </style>
 </head>
@@ -36,16 +32,15 @@ button {
 <body>
 
 <h2>📍 Partager ma position</h2>
-<button onclick="start()">Partager ma position</button>
+<button id="btn">Partager</button>
 
-<p id="coords">En attente...</p>
-<p id="address">Adresse inconnue</p>
+<p id="status">En attente...</p>
+<p id="address"></p>
 
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-<!-- FIREBASE -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -63,57 +58,38 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-window.sendToFirebase = async (data) => {
-  try {
-    await addDoc(collection(db, "logs"), data);
-    console.log("OK Firebase");
-  } catch(e){
-    console.error(e);
-    alert("Erreur Firebase: " + e.message);
-  }
-};
-</script>
-
-<script>
-let map;
-let marker;
-
-function start(){
+// bouton = déclenche tout
+document.getElementById("btn").addEventListener("click", () => {
 
   if (!navigator.geolocation) {
-    alert("Géolocalisation non supportée");
+    alert("GPS non supporté");
     return;
   }
 
-  navigator.geolocation.watchPosition(async (pos) => {
+  document.getElementById("status").innerText = "Demande de permission...";
+
+  navigator.geolocation.getCurrentPosition(async (pos) => {
 
     const lat = pos.coords.latitude;
     const lon = pos.coords.longitude;
 
-    document.getElementById("coords").innerText =
-      `Lat: ${lat} | Lon: ${lon}`;
+    document.getElementById("status").innerText = "Position OK";
 
     // MAP
-    if (!map) {
-      map = L.map('map').setView([lat, lon], 16);
+    const map = L.map('map').setView([lat, lon], 16);
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png')
-        .addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png')
+      .addTo(map);
 
-      marker = L.marker([lat, lon]).addTo(map);
-    } else {
-      map.setView([lat, lon]);
-      marker.setLatLng([lat, lon]);
-    }
+    L.marker([lat, lon]).addTo(map);
 
-    // GEOAPIFY
+    // ADRESSE
     let address = "Inconnue";
 
     try {
       const res = await fetch(
         `https://api.geoapify.com/v1/geocode/reverse?lat=${lat}&lon=${lon}&apiKey=708354c5ad334d41b0611f73996998e1`
       );
-
       const data = await res.json();
       address = data.features?.[0]?.properties?.formatted || "Inconnue";
     } catch(e){}
@@ -121,7 +97,7 @@ function start(){
     document.getElementById("address").innerText = address;
 
     // FIREBASE
-    await window.sendToFirebase({
+    await addDoc(collection(db, "logs"), {
       lat,
       lon,
       address,
@@ -130,11 +106,19 @@ function start(){
     });
 
   }, (err) => {
-    alert("Erreur: " + err.message);
+
+    // GESTION CLAIRE ERREUR
+    if (err.code === 1) {
+      alert("❌ Tu as refusé la localisation → autorise-la dans ton navigateur");
+    } else {
+      alert("Erreur GPS: " + err.message);
+    }
+
   }, {
     enableHighAccuracy: true
   });
-}
+
+});
 </script>
 
 </body>
