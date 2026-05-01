@@ -20,20 +20,13 @@ body {
 #map {
   height:70vh;
 }
-
-button {
-  margin:15px;
-  padding:12px;
-  font-size:16px;
-}
 </style>
 </head>
 
 <body>
 
 <h2>📍 Partager ma position</h2>
-
-<button onclick="start()">Partager ma position</button>
+<button onclick="start()">Partager</button>
 
 <p id="coords">En attente...</p>
 <p id="address">Adresse inconnue</p>
@@ -42,7 +35,6 @@ button {
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-<!-- FIREBASE -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -57,12 +49,19 @@ const firebaseConfig = {
   measurementId: "G-4M4S7687W5"
 };
 
+
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-window.db = db;
-window.addDoc = addDoc;
-window.collection = collection;
+window.sendToFirebase = async (data) => {
+  try {
+    await addDoc(collection(db, "logs"), data);
+    console.log("OK Firebase");
+  } catch(e){
+    console.error(e);
+    alert("Erreur Firebase: " + e.message);
+  }
+};
 </script>
 
 <script>
@@ -71,38 +70,24 @@ let marker;
 
 function start(){
 
-  if (!navigator.geolocation) {
-    alert("Géolocalisation non supportée");
-    return;
-  }
-
-  navigator.geolocation.watchPosition(async (pos) => {
+  navigator.geolocation.getCurrentPosition(async (pos) => {
 
     const lat = pos.coords.latitude;
     const lon = pos.coords.longitude;
-    const accuracy = pos.coords.accuracy;
-    const speed = pos.coords.speed;
-    const heading = pos.coords.heading;
 
     document.getElementById("coords").innerText =
-      `Lat: ${lat} | Lon: ${lon} | ±${accuracy}m`;
+      `Lat: ${lat} | Lon: ${lon}`;
 
     // MAP
-    if (!map) {
-      map = L.map('map').setView([lat, lon], 16);
+    map = L.map('map').setView([lat, lon], 16);
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png')
-        .addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png')
+      .addTo(map);
 
-      marker = L.marker([lat, lon]).addTo(map);
-    } else {
-      map.setView([lat, lon]);
-      marker.setLatLng([lat, lon]);
-    }
+    marker = L.marker([lat, lon]).addTo(map);
 
     // GEOAPIFY
     let address = "Inconnue";
-    let details = {};
 
     try {
       const res = await fetch(
@@ -110,55 +95,22 @@ function start(){
       );
 
       const data = await res.json();
-
-      const props = data.features?.[0]?.properties;
-
-      if (props) {
-        address = props.formatted;
-
-        details = {
-          country: props.country,
-          city: props.city,
-          postcode: props.postcode,
-          street: props.street,
-          housenumber: props.housenumber,
-          state: props.state,
-          suburb: props.suburb
-        };
-      }
-
+      address = data.features?.[0]?.properties?.formatted || "Inconnue";
     } catch(e){}
 
     document.getElementById("address").innerText = address;
 
-    // FIREBASE LOG COMPLET
-    await window.addDoc(window.collection(window.db, "logs"), {
-
-      // POSITION
+    // FIREBASE
+    await sendToFirebase({
       lat,
       lon,
-      accuracy,
-      speed,
-      heading,
-
-      // ADRESSE
       address,
-      ...details,
-
-      // DEVICE
       userAgent: navigator.userAgent,
-      language: navigator.language,
-      platform: navigator.platform,
-
-      // TEMPS
       time: new Date().toISOString()
-
     });
 
   }, (err) => {
-    alert("Erreur : " + err.message);
-  }, {
-    enableHighAccuracy: true
+    alert("Erreur: " + err.message);
   });
 }
 </script>
