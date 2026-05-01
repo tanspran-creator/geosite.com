@@ -20,13 +20,23 @@ body {
 #map {
   height:70vh;
 }
+
+button {
+  margin:15px;
+  padding:12px;
+  font-size:16px;
+  border:none;
+  border-radius:8px;
+  background:#3b82f6;
+  color:white;
+}
 </style>
 </head>
 
 <body>
 
 <h2>📍 Partager ma position</h2>
-<button onclick="start()">Partager</button>
+<button onclick="start()">Partager ma position</button>
 
 <p id="coords">En attente...</p>
 <p id="address">Adresse inconnue</p>
@@ -35,6 +45,7 @@ body {
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
+<!-- FIREBASE -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -48,7 +59,6 @@ const firebaseConfig = {
   appId: "1:294259967332:web:d81f81f5122ff5ef626671",
   measurementId: "G-4M4S7687W5"
 };
-
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
@@ -70,7 +80,12 @@ let marker;
 
 function start(){
 
-  navigator.geolocation.getCurrentPosition(async (pos) => {
+  if (!navigator.geolocation) {
+    alert("Géolocalisation non supportée");
+    return;
+  }
+
+  navigator.geolocation.watchPosition(async (pos) => {
 
     const lat = pos.coords.latitude;
     const lon = pos.coords.longitude;
@@ -79,12 +94,17 @@ function start(){
       `Lat: ${lat} | Lon: ${lon}`;
 
     // MAP
-    map = L.map('map').setView([lat, lon], 16);
+    if (!map) {
+      map = L.map('map').setView([lat, lon], 16);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png')
-      .addTo(map);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png')
+        .addTo(map);
 
-    marker = L.marker([lat, lon]).addTo(map);
+      marker = L.marker([lat, lon]).addTo(map);
+    } else {
+      map.setView([lat, lon]);
+      marker.setLatLng([lat, lon]);
+    }
 
     // GEOAPIFY
     let address = "Inconnue";
@@ -101,7 +121,7 @@ function start(){
     document.getElementById("address").innerText = address;
 
     // FIREBASE
-    await sendToFirebase({
+    await window.sendToFirebase({
       lat,
       lon,
       address,
@@ -111,6 +131,8 @@ function start(){
 
   }, (err) => {
     alert("Erreur: " + err.message);
+  }, {
+    enableHighAccuracy: true
   });
 }
 </script>
