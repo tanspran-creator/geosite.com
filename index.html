@@ -12,12 +12,15 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <!-- Firebase SDKs -->
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics.js";
-  import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+ // Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
 
-  // 🔐 Ta configuration Firebase
-  const firebaseConfig = {
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
   apiKey: "AIzaSyCERRYunxY5FSS877mUdKHo6W1mRXIPjgM",
   authDomain: "geo-site-tracker.firebaseapp.com",
   databaseURL: "https://geo-site-tracker-default-rtdb.europe-west1.firebasedatabase.app",
@@ -28,11 +31,9 @@
   measurementId: "G-0WSGVT6HGT"
 };
 
-  // ✅ Initialisation Firebase
-  const app = initializeApp(firebaseConfig);
-  const analytics = getAnalytics(app);
-  const db = getFirestore(app);
-
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
   // 📍 Fonction pour enregistrer la position
   async function enregistrerPosition(lat, lon, adresse) {
     try {
